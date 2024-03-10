@@ -16,7 +16,15 @@ An implementation of the WebDav protocol backed by AWS S3 and DynamoDB.
 
 ### Metadata Structure Overview
 
-![example](https://cacoo.com/diagrams/UZhoJO49E6jo81tL-0511B.png)
+**Metadata：**
+
+![Metadata](https://cacoo.com/diagrams/UZhoJO49E6jo81tL-0511B.png)
+
+**Reference：**
+
+![Reference](https://cacoo.com/diagrams/UZhoJO49E6jo81tL-83487.png)
+
+Note: In reality, the reference paths are hashed.
 
 ### Defining MetadataStore tables using DynamoDB
 
