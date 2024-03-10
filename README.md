@@ -44,7 +44,7 @@ Note: In reality, the reference paths are hashed.
 
 | Key    | Attributes         | Type   | Description                                |
 |--------|--------------------|--------|--------------------------------------------|
-| PK     | id                 | string | Unique ID (eg. UUID)                       |
+| PK     | id                 | string | Unique ID (eg. hashed path)                |
 |        | entries            | map    | key(hashed path): value(metadata id)       |
 |        | version            | number | Version number for optimistic lock (eg. 1) |
 
