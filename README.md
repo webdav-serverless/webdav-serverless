@@ -59,6 +59,7 @@ $bucket_name/$UUID
 
 * **[vvatanabe](https://github.com/vvatanabe/)** - *Main contributor*
 * **[safx](https://github.com/safx/)** - *Main contributor*
+* **[kunst1080](https://github.com/kunst1080/)** - *Main contributor*
 * Currently, there are no other contributors
 
 ## License
