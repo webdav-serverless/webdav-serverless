@@ -37,7 +37,7 @@ type Entry struct {
 	ParentID string    `dynamodbav:"parent_id"`
 	Name     string    `dynamodbav:"name"`
 	Type     EntryType `dynamodbav:"type"`
-	Size     int       `dynamodbav:"size"`
+	Size     int64     `dynamodbav:"size"`
 	Modify   time.Time `dynamodbav:"modify"`
 	Version  int       `dynamodbav:"version"`
 }
