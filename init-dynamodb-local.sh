@@ -6,16 +6,16 @@ aws dynamodb create-table \
     --region us-east-1 \
     --endpoint-url $DYNAMO_DB_URL \
     --attribute-definitions \
-        AttributeName=ID,AttributeType=S \
+        AttributeName=id,AttributeType=S \
     --key-schema \
-        AttributeName=ID,KeyType=HASH \
+        AttributeName=id,KeyType=HASH \
     --billing-mode PAY_PER_REQUEST
 aws dynamodb create-table \
     --table-name Reference \
     --region us-east-1 \
     --endpoint-url $DYNAMO_DB_URL \
     --attribute-definitions \
-        AttributeName=ID,AttributeType=S \
+        AttributeName=id,AttributeType=S \
     --key-schema \
-        AttributeName=ID,KeyType=HASH \
+        AttributeName=id,KeyType=HASH \
     --billing-mode PAY_PER_REQUEST
