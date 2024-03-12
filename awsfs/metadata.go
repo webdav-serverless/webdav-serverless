@@ -79,7 +79,7 @@ func (m MetadataStore) GetReference(ctx context.Context, id string) (Reference, 
 }
 
 func (m MetadataStore) GetEntry(ctx context.Context, id string) (Entry, error) {
-	resp, err := m.DynamoDBClient.GetItem(ctx, &dynamodb.GetItemInput{
+	out, err := m.DynamoDBClient.GetItem(ctx, &dynamodb.GetItemInput{
 		Key: map[string]types.AttributeValue{
 			"id": &types.AttributeValueMemberS{Value: id},
 		},
@@ -87,17 +87,17 @@ func (m MetadataStore) GetEntry(ctx context.Context, id string) (Entry, error) {
 		ConsistentRead: aws.Bool(true),
 	})
 	if err != nil {
-		return Entry{}, err
+		return Entry{}, fmt.Errorf("failed to get item: %w", err)
 	}
-	if resp.Item == nil {
+	if out.Item == nil {
 		return Entry{}, ErrNoSuchEntry
 	}
-	item := Entry{}
-	err = attributevalue.UnmarshalMap(resp.Item, &item)
+	entry := Entry{}
+	err = attributevalue.UnmarshalMap(out.Item, &entry)
 	if err != nil {
-		return Entry{}, err
+		return Entry{}, fmt.Errorf("failed to unmarshal map: %w", err)
 	}
-	return item, nil
+	return entry, nil
 }
 
 func (m MetadataStore) AddEntry(ctx context.Context, entry Entry, ref Reference) error {
@@ -138,6 +138,69 @@ func (m MetadataStore) AddEntry(ctx context.Context, entry Entry, ref Reference)
 					ConditionExpression:                 expr.Condition(),
 					ExpressionAttributeNames:            expr.Names(),
 					ExpressionAttributeValues:           expr.Values(),
+					ReturnValuesOnConditionCheckFailure: types.ReturnValuesOnConditionCheckFailureNone,
+				},
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to transact write items: %w", err)
+	}
+	return nil
+}
+
+func (m MetadataStore) UpdateEntryName(ctx context.Context, entry Entry, ref Reference) error {
+	entryCondition := expression.Name("version").Equal(expression.Value(entry.Version))
+	entryUpdate := expression.Set(expression.Name("name"), expression.Value(entry.Name)).
+		Add(expression.Name("version"), expression.Value(ref.Version+1))
+	entryExpr, err := expression.NewBuilder().
+		WithCondition(entryCondition).
+		WithUpdate(entryUpdate).
+		Build()
+	if err != nil {
+		return fmt.Errorf("failed to build expression, %w", err)
+	}
+
+	refCondition := expression.Name("version").Equal(expression.Value(ref.Version))
+	refUpdate := expression.Set(expression.Name("entries"), expression.Value(ref.Entries)).
+		Add(expression.Name("version"), expression.Value(ref.Version+1))
+	refExpr, err := expression.NewBuilder().
+		WithCondition(refCondition).
+		WithUpdate(refUpdate).
+		Build()
+	if err != nil {
+		return fmt.Errorf("failed to build expression, %w", err)
+	}
+
+	_, err = m.DynamoDBClient.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
+		TransactItems: []types.TransactWriteItem{
+			{
+				Update: &types.Update{
+					Key: map[string]types.AttributeValue{
+						"id": &types.AttributeValueMemberS{
+							Value: entry.ID,
+						},
+					},
+					TableName:                           aws.String(m.EntryTableName),
+					UpdateExpression:                    entryExpr.Update(),
+					ConditionExpression:                 entryExpr.Condition(),
+					ExpressionAttributeNames:            entryExpr.Names(),
+					ExpressionAttributeValues:           entryExpr.Values(),
+					ReturnValuesOnConditionCheckFailure: types.ReturnValuesOnConditionCheckFailureNone,
+				},
+			},
+			{
+				Update: &types.Update{
+					Key: map[string]types.AttributeValue{
+						"id": &types.AttributeValueMemberS{
+							Value: ref.ID,
+						},
+					},
+					TableName:                           aws.String(m.ReferenceTableName),
+					UpdateExpression:                    refExpr.Update(),
+					ConditionExpression:                 refExpr.Condition(),
+					ExpressionAttributeNames:            refExpr.Names(),
+					ExpressionAttributeValues:           refExpr.Values(),
 					ReturnValuesOnConditionCheckFailure: types.ReturnValuesOnConditionCheckFailureNone,
 				},
 			},
