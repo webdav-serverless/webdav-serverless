@@ -7,11 +7,11 @@ import (
 	"golang.org/x/net/webdav"
 )
 
-func (d Dir) OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (webdav.File, error) {
-	if name = resolve(string(d), name); name == "" {
-		return nil, os.ErrNotExist
+func (s Server) OpenFile(ctx context.Context, path string, flag int, perm os.FileMode) (webdav.File, error) {
+	if path = slashClean(path); path == "/" {
+		return nil, os.ErrExist
 	}
-	f, err := os.OpenFile(name, flag, perm)
+	f, err := os.OpenFile(path, flag, perm)
 	if err != nil {
 		return nil, err
 	}

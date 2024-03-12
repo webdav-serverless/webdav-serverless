@@ -13,17 +13,17 @@ import (
 
 func main() {
 
-	dirFlag := flag.String("d", "./", "Directory to serve from. Default is CWD")
 	httpPort := flag.Int("p", 80, "Port to serve on (Plain HTTP)")
 	httpsPort := flag.Int("ps", 443, "Port to serve TLS on")
 	serveSecure := flag.Bool("s", false, "Serve HTTPS. Default false")
 
 	flag.Parse()
 
-	dir := *dirFlag
-
 	srv := &webdav.Handler{
-		FileSystem: awsfs.Dir(dir),
+		FileSystem: awsfs.Server{
+			MetadataStore: awsfs.MetadataStore{},
+			PhysicalStore: awsfs.PhysicalStore{},
+		},
 		LockSystem: webdav.NewMemLS(),
 		Logger: func(r *http.Request, err error) {
 			if err != nil {

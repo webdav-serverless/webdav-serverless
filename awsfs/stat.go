@@ -5,9 +5,9 @@ import (
 	"os"
 )
 
-func (d Dir) Stat(ctx context.Context, name string) (os.FileInfo, error) {
-	if name = resolve(string(d), name); name == "" {
-		return nil, os.ErrNotExist
+func (s Server) Stat(ctx context.Context, path string) (os.FileInfo, error) {
+	if path = slashClean(path); path == "/" {
+		return nil, os.ErrInvalid
 	}
-	return os.Stat(name)
+	return os.Stat(path)
 }
