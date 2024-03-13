@@ -1,28 +1,55 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/webdav-serverless/webdav-serverless/awsfs"
 	"golang.org/x/net/webdav"
 )
 
 func main() {
 
-	httpPort := flag.Int("p", 80, "Port to serve on (Plain HTTP)")
-	httpsPort := flag.Int("ps", 443, "Port to serve TLS on")
-	serveSecure := flag.Bool("s", false, "Serve HTTPS. Default false")
+	httpPort := flag.Int("port", 80, "Port to serve on (Plain HTTP)")
+	httpsPort := flag.Int("port-secure", 443, "Port to serve TLS on")
+	serveSecure := flag.Bool("secure", false, "Serve HTTPS. Default false")
+	dynamodbURL := flag.String("dynamodb-url", "", "DynamoDB base endpoint (for local development)")
+	s3URL := flag.String("s3-url", "", "S3 base endpoint (for local development)")
 
 	flag.Parse()
 
+	ctx := context.Background()
+	cfg, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		log.Fatalf("failed to load aws config: %v", err)
+	}
+
 	srv := &webdav.Handler{
 		FileSystem: awsfs.Server{
-			MetadataStore: awsfs.MetadataStore{},
-			PhysicalStore: awsfs.PhysicalStore{},
+			MetadataStore: awsfs.MetadataStore{
+				EntryTableName:     "Entry",
+				ReferenceTableName: "Reference",
+				DynamoDBClient: dynamodb.NewFromConfig(cfg, func(options *dynamodb.Options) {
+					if *dynamodbURL != "" {
+						options.BaseEndpoint = dynamodbURL
+					}
+				}),
+			},
+			PhysicalStore: awsfs.PhysicalStore{
+				BucketName: "webdav-serverless",
+				S3Client: s3.NewFromConfig(cfg, func(options *s3.Options) {
+					if *s3URL != "" {
+						options.BaseEndpoint = s3URL
+					}
+				}),
+			},
 		},
 		LockSystem: webdav.NewMemLS(),
 		Logger: func(r *http.Request, err error) {
