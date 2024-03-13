@@ -18,7 +18,10 @@ type MetadataStore struct {
 	DynamoDBClient     dynamodb.Client
 }
 
-var ErrNoSuchReference = errors.New("no such reference")
+var (
+	ErrNoSuchReference = errors.New("no such reference")
+	ErrNoSuchEntry     = errors.New("no such entry")
+)
 
 func (m MetadataStore) GetReference(ctx context.Context, id string) (Reference, error) {
 	resp, err := m.DynamoDBClient.GetItem(ctx, &dynamodb.GetItemInput{
@@ -38,6 +41,28 @@ func (m MetadataStore) GetReference(ctx context.Context, id string) (Reference, 
 	err = attributevalue.UnmarshalMap(resp.Item, &item)
 	if err != nil {
 		return Reference{}, err
+	}
+	return item, nil
+}
+
+func (m MetadataStore) GetEntry(ctx context.Context, id string) (Entry, error) {
+	resp, err := m.DynamoDBClient.GetItem(ctx, &dynamodb.GetItemInput{
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: id},
+		},
+		TableName:      aws.String(m.EntryTableName),
+		ConsistentRead: aws.Bool(true),
+	})
+	if err != nil {
+		return Entry{}, err
+	}
+	if resp.Item == nil {
+		return Entry{}, ErrNoSuchEntry
+	}
+	item := Entry{}
+	err = attributevalue.UnmarshalMap(resp.Item, &item)
+	if err != nil {
+		return Entry{}, err
 	}
 	return item, nil
 }
