@@ -15,7 +15,7 @@ import (
 type MetadataStore struct {
 	EntryTableName     string
 	ReferenceTableName string
-	DynamoDBClient     dynamodb.Client
+	DynamoDBClient     *dynamodb.Client
 }
 
 var (
