@@ -6,8 +6,30 @@ import (
 )
 
 func (s Server) Stat(ctx context.Context, path string) (os.FileInfo, error) {
-	if path = slashClean(path); path == "/" {
-		return nil, os.ErrInvalid
+	path = slashClean(path)
+
+	ref, err := s.MetadataStore.GetReference(ctx, path)
+	if err != nil {
+		return nil, err
 	}
-	return os.Stat(path)
+
+	id, ok := ref.Entries[path]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+
+	entry, err := s.MetadataStore.GetEntry(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	info := FileInfo{
+		name:    entry.Name,
+		size:    entry.Size,
+		mode:    os.FileMode(0), // FIXME
+		modTime: entry.Modify,
+		isDir:   entry.Type == EntryTypeDir,
+	}
+
+	return info, nil
 }
