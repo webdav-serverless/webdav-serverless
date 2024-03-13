@@ -53,6 +53,7 @@ func (s PhysicalStore) PutObjectLarge(ctx context.Context, objectKey string, r i
 	if err != nil {
 		log.Printf("Couldn't upload large object to %v:%v. Here's why: %v\n",
 			s.BucketName, objectKey, err)
+		return err
 	}
-	return err
+	return nil
 }

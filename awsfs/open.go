@@ -3,6 +3,7 @@ package awsfs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"time"
@@ -48,8 +49,9 @@ func (f FileInfo) Sys() any {
 }
 
 func (s Server) OpenFile(ctx context.Context, path string, flag int, perm os.FileMode) (webdav.File, error) {
-	if path = slashClean(path); path == "/" {
-		return nil, os.ErrExist
+	fmt.Println("OpenFile: ", path)
+	if path = slashClean(path); path == "" {
+		return nil, os.ErrInvalid
 	}
 	if flag == os.O_RDONLY {
 		return s.openFileReader(ctx, path, flag, perm)

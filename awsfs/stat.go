@@ -2,19 +2,24 @@ package awsfs
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"os"
 )
 
 func (s Server) Stat(ctx context.Context, path string) (os.FileInfo, error) {
+	fmt.Println("Stat: ", path)
 	path = slashClean(path)
 
-	ref, err := s.MetadataStore.GetReference(ctx, path)
+	ref, err := s.MetadataStore.GetReference(ctx, referenceID)
 	if err != nil {
 		return nil, err
 	}
 
-	id, ok := ref.Entries[path]
+	unescaped, _ := url.QueryUnescape(path)
+	id, ok := ref.Entries[unescaped]
 	if !ok {
+		fmt.Println("Stat: ", path, "- not found")
 		return nil, os.ErrNotExist
 	}
 
@@ -30,6 +35,8 @@ func (s Server) Stat(ctx context.Context, path string) (os.FileInfo, error) {
 		modTime: entry.Modify,
 		isDir:   entry.Type == EntryTypeDir,
 	}
+
+	fmt.Println("info: ", info)
 
 	return info, nil
 }

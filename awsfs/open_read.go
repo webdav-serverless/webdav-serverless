@@ -24,6 +24,35 @@ func (s Server) openFileReader(ctx context.Context, path string, flag int, perm 
 		return nil, err
 	}
 
+	if entry.Type == EntryTypeDir {
+		entries, err := s.MetadataStore.GetEntriesByParentID(ctx, entryID)
+		if err != nil {
+			return nil, err
+		}
+		var files []fs.FileInfo
+		for _, entry := range entries {
+			files = append(files, FileInfo{
+				name:    entry.Name,
+				size:    entry.Size,
+				mode:    0,
+				modTime: entry.Modify,
+				isDir:   entry.Type == EntryTypeDir,
+				sys:     nil,
+			})
+		}
+		return &FileReader{
+			fileInfo: FileInfo{
+				name:    entry.Name,
+				size:    entry.Size,
+				mode:    perm,
+				modTime: entry.Modify,
+				isDir:   entry.Type == EntryTypeDir,
+				sys:     nil,
+			},
+			files: files,
+		}, nil
+	}
+
 	r, err := s.PhysicalStore.GetObject(ctx, entryID)
 	if err != nil {
 		return nil, err
@@ -45,9 +74,13 @@ func (s Server) openFileReader(ctx context.Context, path string, flag int, perm 
 type FileReader struct {
 	io.ReadCloser
 	fileInfo FileInfo
+	files    []fs.FileInfo
 }
 
 func (f FileReader) Close() error {
+	if f.ReadCloser == nil {
+		return nil
+	}
 	return f.ReadCloser.Close()
 }
 
@@ -60,11 +93,11 @@ func (f FileReader) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (f FileReader) Readdir(count int) ([]fs.FileInfo, error) {
-	return nil, ErrNotSupported
+	return f.files, nil
 }
 
 func (f FileReader) Stat() (fs.FileInfo, error) {
-	return nil, ErrNotSupported
+	return f.fileInfo, nil
 }
 
 func (f FileReader) Write(p []byte) (n int, err error) {
