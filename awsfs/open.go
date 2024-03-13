@@ -51,7 +51,6 @@ func (s Server) OpenFile(ctx context.Context, path string, flag int, perm os.Fil
 	if path = slashClean(path); path == "/" {
 		return nil, os.ErrExist
 	}
-
 	if flag == os.O_RDONLY {
 		return s.openFileReader(ctx, path, flag, perm)
 	}

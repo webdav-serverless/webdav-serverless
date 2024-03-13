@@ -211,3 +211,53 @@ func (m MetadataStore) UpdateEntryName(ctx context.Context, entry Entry, ref Ref
 	}
 	return nil
 }
+
+func (m MetadataStore) DeleteEntries(ctx context.Context, ids []string, ref Reference) error {
+	refCondition := expression.Name("version").Equal(expression.Value(ref.Version))
+	refUpdate := expression.Set(expression.Name("entries"), expression.Value(ref.Entries)).
+		Add(expression.Name("version"), expression.Value(ref.Version+1))
+	refExpr, err := expression.NewBuilder().
+		WithCondition(refCondition).
+		WithUpdate(refUpdate).
+		Build()
+	if err != nil {
+		return fmt.Errorf("failed to build expression, %w", err)
+	}
+
+	var deleteItems []types.TransactWriteItem
+	for _, id := range ids {
+		deleteItems = append(deleteItems, types.TransactWriteItem{
+			Delete: &types.Delete{
+				TableName: aws.String(m.EntryTableName),
+				Key: map[string]types.AttributeValue{
+					"ID": &types.AttributeValueMemberS{
+						Value: id,
+					},
+				},
+			},
+		})
+	}
+	deleteItems = append(deleteItems, types.TransactWriteItem{
+		Update: &types.Update{
+			Key: map[string]types.AttributeValue{
+				"id": &types.AttributeValueMemberS{
+					Value: ref.ID,
+				},
+			},
+			TableName:                           aws.String(m.ReferenceTableName),
+			UpdateExpression:                    refExpr.Update(),
+			ConditionExpression:                 refExpr.Condition(),
+			ExpressionAttributeNames:            refExpr.Names(),
+			ExpressionAttributeValues:           refExpr.Values(),
+			ReturnValuesOnConditionCheckFailure: types.ReturnValuesOnConditionCheckFailureNone,
+		},
+	})
+	_, err = m.DynamoDBClient.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
+		TransactItems: deleteItems,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete items, %w", err)
+	}
+
+	return nil
+}
