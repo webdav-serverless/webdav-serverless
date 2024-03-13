@@ -3,6 +3,7 @@ package awsfs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -11,11 +12,13 @@ import (
 )
 
 func (s Server) Mkdir(ctx context.Context, path string, perm os.FileMode) error {
+	fmt.Println("Mkdir: ", path)
+
 	if path = slashClean(path); path == "/" {
 		return os.ErrExist
 	}
 
-	ref, err := s.MetadataStore.GetReference(ctx, path)
+	ref, err := s.MetadataStore.GetReference(ctx, referenceID)
 	if err != nil {
 		return err
 	}

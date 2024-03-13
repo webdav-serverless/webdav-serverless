@@ -2,7 +2,7 @@
 set -u
 
 aws dynamodb create-table \
-    --table-name Metadata \
+    --table-name Entry \
     --region us-east-1 \
     --endpoint-url $DYNAMO_DB_URL \
     --attribute-definitions \

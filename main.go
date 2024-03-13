@@ -31,25 +31,33 @@ func main() {
 		log.Fatalf("failed to load aws config: %v", err)
 	}
 
+	metadataStore := awsfs.MetadataStore{
+		EntryTableName:     "Entry",
+		ReferenceTableName: "Reference",
+		DynamoDBClient: dynamodb.NewFromConfig(cfg, func(options *dynamodb.Options) {
+			if *dynamodbURL != "" {
+				options.BaseEndpoint = dynamodbURL
+			}
+		}),
+	}
+
+	physicalStore := awsfs.PhysicalStore{
+		BucketName: "webdav-serverless",
+		S3Client: s3.NewFromConfig(cfg, func(options *s3.Options) {
+			if *s3URL != "" {
+				options.BaseEndpoint = s3URL
+			}
+		}),
+	}
+
+	if err = metadataStore.InitReference(context.Background()); err != nil {
+		log.Fatalf("failed to init refarence: %v", err)
+	}
+
 	srv := &webdav.Handler{
 		FileSystem: awsfs.Server{
-			MetadataStore: awsfs.MetadataStore{
-				EntryTableName:     "Entry",
-				ReferenceTableName: "Reference",
-				DynamoDBClient: dynamodb.NewFromConfig(cfg, func(options *dynamodb.Options) {
-					if *dynamodbURL != "" {
-						options.BaseEndpoint = dynamodbURL
-					}
-				}),
-			},
-			PhysicalStore: awsfs.PhysicalStore{
-				BucketName: "webdav-serverless",
-				S3Client: s3.NewFromConfig(cfg, func(options *s3.Options) {
-					if *s3URL != "" {
-						options.BaseEndpoint = s3URL
-					}
-				}),
-			},
+			MetadataStore: metadataStore,
+			PhysicalStore: physicalStore,
 		},
 		LockSystem: webdav.NewMemLS(),
 		Logger: func(r *http.Request, err error) {

@@ -23,6 +23,39 @@ var (
 	ErrNoSuchEntry     = errors.New("no such entry")
 )
 
+func (m MetadataStore) InitReference(ctx context.Context) error {
+	_, err := m.GetReference(ctx, referenceID)
+	if errors.Is(err, ErrNoSuchReference) {
+		err := m.AddReference(ctx, Reference{
+			ID:      referenceID,
+			Entries: make(map[string]string),
+			Version: 1,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to init reference: %w", err)
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get reference: %w", err)
+	}
+	return nil
+}
+
+func (m MetadataStore) AddReference(ctx context.Context, ref Reference) error {
+	refItem, err := attributevalue.MarshalMap(ref)
+	if err != nil {
+		return fmt.Errorf("failed to marshal reference: %w", err)
+	}
+	_, err = m.DynamoDBClient.PutItem(ctx, &dynamodb.PutItemInput{
+		Item:      refItem,
+		TableName: aws.String(m.ReferenceTableName),
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (m MetadataStore) GetReference(ctx context.Context, id string) (Reference, error) {
 	resp, err := m.DynamoDBClient.GetItem(ctx, &dynamodb.GetItemInput{
 		Key: map[string]types.AttributeValue{
@@ -32,7 +65,7 @@ func (m MetadataStore) GetReference(ctx context.Context, id string) (Reference, 
 		ConsistentRead: aws.Bool(true),
 	})
 	if err != nil {
-		return Reference{}, err
+		return Reference{}, fmt.Errorf("failed to get item: %w", err)
 	}
 	if resp.Item == nil {
 		return Reference{}, ErrNoSuchReference
