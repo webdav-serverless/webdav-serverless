@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -21,6 +23,7 @@ func (s Server) openFileWriter(ctx context.Context, path string, flag int, perm 
 
 	_, ok := ref.Entries[path]
 	if ok {
+		fmt.Println("[debug] openFileWriter: ", path, " already exists")
 		return nil, os.ErrExist
 	}
 
@@ -32,11 +35,28 @@ func (s Server) openFileWriter(ctx context.Context, path string, flag int, perm 
 	}
 
 	entryID := uuid.New().String()
-	buf := bytes.Buffer{}
-	errChan := make(chan error)
+	buf := &bytes.Buffer{}
+
+	newEntry := Entry{
+		ID:       entryID,
+		ParentID: parentID,
+		Name:     filepath.Base(path),
+		Type:     EntryTypeFile,
+		//Size:     int64(buf.Len()),
+		Modify:  time.Now(),
+		Version: 1,
+	}
+
 	w := &FileWriter{
 		Buffer: buf,
-		close: func() (fs.FileInfo, error) {
+		entry:  newEntry,
+		close: func(buf *bytes.Buffer) (fs.FileInfo, error) {
+			fmt.Println(" buf.Len()!!!: ", buf.Len())
+			err = s.PhysicalStore.PutObject(ctx, entryID, buf)
+			if err != nil {
+				fmt.Println("Error: ", err)
+			}
+
 			newEntry := Entry{
 				ID:       entryID,
 				ParentID: parentID,
@@ -61,54 +81,69 @@ func (s Server) openFileWriter(ctx context.Context, path string, flag int, perm 
 				sys:     nil,
 			}, nil
 		},
-		errChan: errChan,
 	}
-	go func() {
-		err = s.PhysicalStore.PutObjectLarge(ctx, entryID, w)
-		if err != nil {
-			errChan <- err
-		}
-	}()
 	return w, nil
 }
 
 type FileWriter struct {
-	bytes.Buffer
-	close   func() (fs.FileInfo, error)
-	errChan chan error
-	stat    fs.FileInfo
+	Buffer *bytes.Buffer
+	close  func(buf *bytes.Buffer) (fs.FileInfo, error)
+	entry  Entry
+	pos    int
 }
 
-func (f FileWriter) Close() error {
-	stat, err := f.close()
+func (f *FileWriter) Close() error {
+	_, err := f.close(f.Buffer)
 	if err != nil {
 		return err
 	}
-	f.stat = stat
 	return nil
 }
 
-func (f FileWriter) Read(p []byte) (n int, err error) {
-	select {
-	case e := <-f.errChan:
-		return 0, e
+func (f *FileWriter) Read(p []byte) (n int, err error) {
+	fmt.Println("FileWriter: Read: ", len(p))
+	return f.Buffer.Read(p)
+}
+
+func (f *FileWriter) Seek(offset int64, whence int) (int64, error) {
+	fmt.Println("FileWriter: Seek: ", offset, whence)
+	npos := f.pos
+	// TODO: How to handle offsets greater than the size of system int?
+	switch whence {
+	case io.SeekStart:
+		npos = int(offset)
+	case io.SeekCurrent:
+		npos += int(offset)
+	case io.SeekEnd:
+		//npos = len(f.n.data) + int(offset)
 	default:
+		npos = -1
 	}
-	return f.Read(p)
+	if npos < 0 {
+		return 0, os.ErrInvalid
+	}
+	f.pos = npos
+	return int64(f.pos), nil
 }
 
-func (f FileWriter) Seek(offset int64, whence int) (int64, error) {
-	return 0, ErrNotSupported
-}
-
-func (f FileWriter) Readdir(count int) ([]fs.FileInfo, error) {
+func (f *FileWriter) Readdir(count int) ([]fs.FileInfo, error) {
+	fmt.Println("FileWriter: Readdir: ", count)
 	return nil, ErrNotSupported
 }
 
-func (f FileWriter) Stat() (fs.FileInfo, error) {
-	return f.stat, nil
+func (f *FileWriter) Stat() (fs.FileInfo, error) {
+	file := FileInfo{
+		name:    f.entry.Name,
+		size:    int64(f.Buffer.Len()),
+		mode:    0,
+		modTime: f.entry.Modify,
+		isDir:   f.entry.Type == EntryTypeDir,
+		sys:     nil,
+	}
+	return file, nil
 }
 
-func (f FileWriter) Write(p []byte) (n int, err error) {
+func (f *FileWriter) Write(p []byte) (n int, err error) {
+	fmt.Println("FileWriter: Write: ", len(p))
 	return f.Buffer.Write(p)
 }
