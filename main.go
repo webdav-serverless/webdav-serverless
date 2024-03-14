@@ -8,11 +8,13 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/webdav-serverless/webdav-serverless/awsfs"
-	"golang.org/x/net/webdav"
+	"github.com/webdav-serverless/webdav-serverless/webdav"
 )
 
 func main() {
@@ -41,16 +43,22 @@ func main() {
 		}),
 	}
 
+	s3Cfg := aws.Config{
+		Region:      cfg.Region,
+		Credentials: credentials.NewStaticCredentialsProvider("root", "deadbeef", ""),
+	}
+
 	physicalStore := awsfs.PhysicalStore{
-		BucketName: "webdav-serverless",
-		S3Client: s3.NewFromConfig(cfg, func(options *s3.Options) {
+		BucketName: "test",
+		S3Client: s3.NewFromConfig(s3Cfg, func(options *s3.Options) {
 			if *s3URL != "" {
+				options.UsePathStyle = true
 				options.BaseEndpoint = s3URL
 			}
 		}),
 	}
 
-	if err = metadataStore.InitReference(context.Background()); err != nil {
+	if err = metadataStore.Init(context.Background()); err != nil {
 		log.Fatalf("failed to init refarence: %v", err)
 	}
 

@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/google/uuid"
 )
 
 type MetadataStore struct {
@@ -23,17 +26,57 @@ var (
 	ErrNoSuchEntry     = errors.New("no such entry")
 )
 
-func (m MetadataStore) InitReference(ctx context.Context) error {
+func (m MetadataStore) Init(ctx context.Context) error {
 	_, err := m.GetReference(ctx, referenceID)
 	if errors.Is(err, ErrNoSuchReference) {
-		err := m.AddReference(ctx, Reference{
-			ID:      referenceID,
-			Entries: make(map[string]string),
-			Version: 1,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to init reference: %w", err)
+		entryID := uuid.New().String()
+		entry := Entry{
+			ID:       entryID,
+			ParentID: "root",
+			Name:     "/",
+			Type:     EntryTypeDir,
+			Size:     0,
+			Modify:   time.Now(),
+			Version:  1,
 		}
+		ref := Reference{
+			ID: referenceID,
+			Entries: map[string]string{
+				"/": entryID,
+			},
+			Version: 1,
+		}
+
+		entryItem, err := attributevalue.MarshalMap(entry)
+		if err != nil {
+			return fmt.Errorf("failed to marshal entry: %w", err)
+		}
+		refItem, err := attributevalue.MarshalMap(ref)
+		if err != nil {
+			return fmt.Errorf("failed to marshal refarence: %w", err)
+		}
+
+		_, putErr := m.DynamoDBClient.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
+			TransactItems: []types.TransactWriteItem{
+				{
+					Put: &types.Put{
+						TableName: aws.String(m.EntryTableName),
+						Item:      entryItem,
+					},
+				},
+				{
+					Put: &types.Put{
+						TableName: aws.String(m.ReferenceTableName),
+						Item:      refItem,
+					},
+				},
+			},
+		})
+
+		if putErr != nil {
+			return fmt.Errorf("failed to init: %s", putErr)
+		}
+		return err
 	}
 	if err != nil {
 		return fmt.Errorf("failed to get reference: %w", err)
@@ -100,7 +143,46 @@ func (m MetadataStore) GetEntry(ctx context.Context, id string) (Entry, error) {
 	return entry, nil
 }
 
-func (m MetadataStore) AddEntry(ctx context.Context, entry Entry, ref Reference) error {
+func (m MetadataStore) GetEntriesByParentID(ctx context.Context, id string) ([]Entry, error) {
+
+	builder := expression.NewBuilder().
+		WithKeyCondition(expression.KeyEqual(expression.Key("parent_id"), expression.Value(id)))
+	expr, err := builder.Build()
+	if err != nil {
+		return nil, err
+	}
+
+	out, err := m.DynamoDBClient.Query(ctx, &dynamodb.QueryInput{
+		IndexName:                 aws.String("entry-index-parent_id"),
+		TableName:                 aws.String(m.EntryTableName),
+		ExpressionAttributeNames:  expr.Names(),
+		KeyConditionExpression:    expr.KeyCondition(),
+		ScanIndexForward:          aws.Bool(true),
+		ExpressionAttributeValues: expr.Values(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to query entry: %w", err)
+	}
+	var entries []Entry
+	err = attributevalue.UnmarshalListOfMaps(out.Items, &entries)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal map: %w", err)
+	}
+	return entries, nil
+}
+
+var mux = &sync.Mutex{}
+
+func (m MetadataStore) AddEntry(ctx context.Context, entry Entry, path string) error {
+	mux.Lock()
+	defer mux.Unlock()
+
+	ref, err := m.GetReference(ctx, referenceID)
+	if err != nil {
+		return err
+	}
+	ref.Entries[path] = entry.ID
+
 	entryItem, err := attributevalue.MarshalMap(entry)
 	if err != nil {
 		return fmt.Errorf("failed to marshal entry: %w", err)
@@ -108,7 +190,7 @@ func (m MetadataStore) AddEntry(ctx context.Context, entry Entry, ref Reference)
 
 	condition := expression.Name("version").Equal(expression.Value(ref.Version))
 	update := expression.Set(expression.Name("entries"), expression.Value(ref.Entries)).
-		Add(expression.Name("version"), expression.Value(ref.Version+1))
+		Add(expression.Name("version"), expression.Value(1))
 	expr, err := expression.NewBuilder().
 		WithCondition(condition).
 		WithUpdate(update).
@@ -152,7 +234,7 @@ func (m MetadataStore) AddEntry(ctx context.Context, entry Entry, ref Reference)
 func (m MetadataStore) UpdateEntryName(ctx context.Context, entry Entry, ref Reference) error {
 	entryCondition := expression.Name("version").Equal(expression.Value(entry.Version))
 	entryUpdate := expression.Set(expression.Name("name"), expression.Value(entry.Name)).
-		Add(expression.Name("version"), expression.Value(ref.Version+1))
+		Add(expression.Name("version"), expression.Value(1))
 	entryExpr, err := expression.NewBuilder().
 		WithCondition(entryCondition).
 		WithUpdate(entryUpdate).
@@ -163,7 +245,7 @@ func (m MetadataStore) UpdateEntryName(ctx context.Context, entry Entry, ref Ref
 
 	refCondition := expression.Name("version").Equal(expression.Value(ref.Version))
 	refUpdate := expression.Set(expression.Name("entries"), expression.Value(ref.Entries)).
-		Add(expression.Name("version"), expression.Value(ref.Version+1))
+		Add(expression.Name("version"), expression.Value(1))
 	refExpr, err := expression.NewBuilder().
 		WithCondition(refCondition).
 		WithUpdate(refUpdate).
@@ -215,7 +297,7 @@ func (m MetadataStore) UpdateEntryName(ctx context.Context, entry Entry, ref Ref
 func (m MetadataStore) DeleteEntries(ctx context.Context, ids []string, ref Reference) error {
 	refCondition := expression.Name("version").Equal(expression.Value(ref.Version))
 	refUpdate := expression.Set(expression.Name("entries"), expression.Value(ref.Entries)).
-		Add(expression.Name("version"), expression.Value(ref.Version+1))
+		Add(expression.Name("version"), expression.Value(1))
 	refExpr, err := expression.NewBuilder().
 		WithCondition(refCondition).
 		WithUpdate(refUpdate).
@@ -230,7 +312,7 @@ func (m MetadataStore) DeleteEntries(ctx context.Context, ids []string, ref Refe
 			Delete: &types.Delete{
 				TableName: aws.String(m.EntryTableName),
 				Key: map[string]types.AttributeValue{
-					"ID": &types.AttributeValueMemberS{
+					"id": &types.AttributeValueMemberS{
 						Value: id,
 					},
 				},

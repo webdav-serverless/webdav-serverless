@@ -44,9 +44,7 @@ func (s Server) Mkdir(ctx context.Context, path string, perm os.FileMode) error 
 		Modify:   time.Now(),
 		Version:  1,
 	}
-	newRef := ref
-	newRef.Entries[path] = newEntry.ID
-	err = s.MetadataStore.AddEntry(ctx, newEntry, newRef)
+	err = s.MetadataStore.AddEntry(ctx, newEntry, path)
 	if err != nil {
 		return err
 	}
