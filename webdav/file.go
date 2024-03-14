@@ -40,6 +40,7 @@ func slashClean(name string) string {
 type FileSystem interface {
 	Mkdir(ctx context.Context, name string, perm os.FileMode) error
 	OpenFile(ctx context.Context, name string, flag int, perm os.FileMode) (File, error)
+	Create(ctx context.Context, name string, flag int, perm os.FileMode, reader io.Reader) (os.FileInfo, error)
 	RemoveAll(ctx context.Context, name string) error
 	Rename(ctx context.Context, oldName, newName string) error
 	Stat(ctx context.Context, name string) (os.FileInfo, error)
@@ -150,6 +151,16 @@ func NewMemFS() FileSystem {
 type memFS struct {
 	mu   sync.Mutex
 	root memFSNode
+}
+
+func (fs *memFS) Open(ctx context.Context, name string, flag int, perm os.FileMode) (io.Reader, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (fs *memFS) Create(ctx context.Context, name string, flag int, perm os.FileMode, reader io.Reader) (os.FileInfo, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 // TODO: clean up and rationalize the walk/find code.
@@ -723,25 +734,13 @@ func copyFiles(ctx context.Context, fs FileSystem, src, dst string, overwrite bo
 		}
 
 	} else {
-		dstFile, err := fs.OpenFile(ctx, dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, srcPerm)
+		_, err := fs.Create(ctx, dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, srcPerm, srcFile)
 		if err != nil {
 			if os.IsNotExist(err) {
 				return http.StatusConflict, err
 			}
 			return http.StatusForbidden, err
 
-		}
-		_, copyErr := io.Copy(dstFile, srcFile)
-		propsErr := copyProps(dstFile, srcFile)
-		closeErr := dstFile.Close()
-		if copyErr != nil {
-			return http.StatusInternalServerError, copyErr
-		}
-		if propsErr != nil {
-			return http.StatusInternalServerError, propsErr
-		}
-		if closeErr != nil {
-			return http.StatusInternalServerError, closeErr
 		}
 	}
 

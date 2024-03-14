@@ -14,7 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/webdav-serverless/webdav-serverless/awsfs"
-	"golang.org/x/net/webdav"
+	"github.com/webdav-serverless/webdav-serverless/webdav"
 )
 
 func main() {

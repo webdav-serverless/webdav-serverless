@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/google/uuid"
-	"time"
 )
 
 type MetadataStore struct {
@@ -74,6 +76,7 @@ func (m MetadataStore) Init(ctx context.Context) error {
 		if putErr != nil {
 			return fmt.Errorf("failed to init: %s", putErr)
 		}
+		return err
 	}
 	if err != nil {
 		return fmt.Errorf("failed to get reference: %w", err)
@@ -168,7 +171,18 @@ func (m MetadataStore) GetEntriesByParentID(ctx context.Context, id string) ([]E
 	return entries, nil
 }
 
-func (m MetadataStore) AddEntry(ctx context.Context, entry Entry, ref Reference) error {
+var mux = &sync.Mutex{}
+
+func (m MetadataStore) AddEntry(ctx context.Context, entry Entry, path string) error {
+	mux.Lock()
+	defer mux.Unlock()
+
+	ref, err := m.GetReference(ctx, referenceID)
+	if err != nil {
+		return err
+	}
+	ref.Entries[path] = entry.ID
+
 	entryItem, err := attributevalue.MarshalMap(entry)
 	if err != nil {
 		return fmt.Errorf("failed to marshal entry: %w", err)
@@ -176,7 +190,7 @@ func (m MetadataStore) AddEntry(ctx context.Context, entry Entry, ref Reference)
 
 	condition := expression.Name("version").Equal(expression.Value(ref.Version))
 	update := expression.Set(expression.Name("entries"), expression.Value(ref.Entries)).
-		Add(expression.Name("version"), expression.Value(ref.Version+1))
+		Add(expression.Name("version"), expression.Value(1))
 	expr, err := expression.NewBuilder().
 		WithCondition(condition).
 		WithUpdate(update).
@@ -220,7 +234,7 @@ func (m MetadataStore) AddEntry(ctx context.Context, entry Entry, ref Reference)
 func (m MetadataStore) UpdateEntryName(ctx context.Context, entry Entry, ref Reference) error {
 	entryCondition := expression.Name("version").Equal(expression.Value(entry.Version))
 	entryUpdate := expression.Set(expression.Name("name"), expression.Value(entry.Name)).
-		Add(expression.Name("version"), expression.Value(ref.Version+1))
+		Add(expression.Name("version"), expression.Value(1))
 	entryExpr, err := expression.NewBuilder().
 		WithCondition(entryCondition).
 		WithUpdate(entryUpdate).
@@ -231,7 +245,7 @@ func (m MetadataStore) UpdateEntryName(ctx context.Context, entry Entry, ref Ref
 
 	refCondition := expression.Name("version").Equal(expression.Value(ref.Version))
 	refUpdate := expression.Set(expression.Name("entries"), expression.Value(ref.Entries)).
-		Add(expression.Name("version"), expression.Value(ref.Version+1))
+		Add(expression.Name("version"), expression.Value(1))
 	refExpr, err := expression.NewBuilder().
 		WithCondition(refCondition).
 		WithUpdate(refUpdate).
@@ -283,7 +297,7 @@ func (m MetadataStore) UpdateEntryName(ctx context.Context, entry Entry, ref Ref
 func (m MetadataStore) DeleteEntries(ctx context.Context, ids []string, ref Reference) error {
 	refCondition := expression.Name("version").Equal(expression.Value(ref.Version))
 	refUpdate := expression.Set(expression.Name("entries"), expression.Value(ref.Entries)).
-		Add(expression.Name("version"), expression.Value(ref.Version+1))
+		Add(expression.Name("version"), expression.Value(1))
 	refExpr, err := expression.NewBuilder().
 		WithCondition(refCondition).
 		WithUpdate(refUpdate).
@@ -298,7 +312,7 @@ func (m MetadataStore) DeleteEntries(ctx context.Context, ids []string, ref Refe
 			Delete: &types.Delete{
 				TableName: aws.String(m.EntryTableName),
 				Key: map[string]types.AttributeValue{
-					"ID": &types.AttributeValueMemberS{
+					"id": &types.AttributeValueMemberS{
 						Value: id,
 					},
 				},

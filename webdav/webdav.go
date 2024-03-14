@@ -8,7 +8,6 @@ package webdav // import "golang.org/x/net/webdav"
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -264,23 +263,13 @@ func (h *Handler) handlePut(w http.ResponseWriter, r *http.Request) (status int,
 	// TODO(rost): Support the If-Match, If-None-Match headers? See bradfitz'
 	// comments in http.checkEtag.
 	ctx := r.Context()
-
-	f, err := h.FileSystem.OpenFile(ctx, reqPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+	fi, err := h.FileSystem.Create(ctx, reqPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666, r.Body)
 	if err != nil {
 		return http.StatusNotFound, err
 	}
-	_, copyErr := io.Copy(f, r.Body)
-	fi, statErr := f.Stat()
-	closeErr := f.Close()
 	// TODO(rost): Returning 405 Method Not Allowed might not be appropriate.
-	if copyErr != nil {
-		return http.StatusMethodNotAllowed, copyErr
-	}
-	if statErr != nil {
-		return http.StatusMethodNotAllowed, statErr
-	}
-	if closeErr != nil {
-		return http.StatusMethodNotAllowed, closeErr
+	if err != nil {
+		return http.StatusMethodNotAllowed, err
 	}
 	etag, err := findETag(ctx, h.FileSystem, h.LockSystem, reqPath, fi)
 	if err != nil {
@@ -459,12 +448,11 @@ func (h *Handler) handleLock(w http.ResponseWriter, r *http.Request) (retStatus 
 
 		// Create the resource if it didn't previously exist.
 		if _, err := h.FileSystem.Stat(ctx, reqPath); err != nil {
-			f, err := h.FileSystem.OpenFile(ctx, reqPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+			_, err := h.FileSystem.Create(ctx, reqPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666, strings.NewReader(""))
 			if err != nil {
 				// TODO: detect missing intermediate dirs and return http.StatusConflict?
 				return http.StatusInternalServerError, err
 			}
-			f.Close()
 			created = true
 		}
 
