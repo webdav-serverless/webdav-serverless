@@ -2,13 +2,15 @@ package awsfs
 
 import (
 	"context"
+	"fmt"
 	"os"
 )
 
 func (s Server) Stat(ctx context.Context, path string) (os.FileInfo, error) {
+	fmt.Println("Stat: ", path)
 	path = slashClean(path)
 
-	ref, err := s.MetadataStore.GetReference(ctx, path)
+	ref, err := s.MetadataStore.GetReference(ctx, referenceID)
 	if err != nil {
 		return nil, err
 	}
