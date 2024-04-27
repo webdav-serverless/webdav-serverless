@@ -55,6 +55,28 @@ Note: In reality, the reference paths are hashed.
 $bucket_name/$UUID
 ```
 
+## Development
+
+Starting Docker Compose:
+```bash
+docker-compose up --force-recreate --build --abort-on-container-exit
+```
+
+Initialize DynamoDB(dynamodb-local):
+```bash
+docker-compose run dynamodb-init
+```
+
+Initialize S3(minio):
+```bash
+docker-compose run s3-init
+```
+
+Run Go Application:
+```bash
+env AWS_ACCESS_KEY_ID="AKIAIOSFODNN7EXAMPLE" AWS_SECRET_ACCESS_KEY="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" AWS_REGION="us-east-1" go run main.go --port=8080 --dynamodb-url=http://localhost:18070 --s3-url=http://localhost:19010
+```
+
 ## Authors
 
 * **[vvatanabe](https://github.com/vvatanabe/)** - *Main contributor*

@@ -26,7 +26,7 @@ type Handler struct {
 	LockSystem LockSystem
 	// Logger is an optional error logger. If non-nil, it will be called
 	// for all HTTP requests.
-	Logger func(*http.Request, error)
+	Logger func(*http.Request, int, error)
 }
 
 func (h *Handler) stripPrefix(p string) (string, int, error) {
@@ -77,7 +77,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if h.Logger != nil {
-		h.Logger(r, err)
+		h.Logger(r, status, err)
 	}
 }
 
@@ -556,9 +556,11 @@ func (h *Handler) handlePropfind(w http.ResponseWriter, r *http.Request) (status
 	walkErr := walkFS(ctx, h.FileSystem, depth, reqPath, fi, walkFn)
 	closeErr := mw.close()
 	if walkErr != nil {
+		fmt.Println("walkErr", walkErr)
 		return http.StatusInternalServerError, walkErr
 	}
 	if closeErr != nil {
+		fmt.Println("closeErr", closeErr)
 		return http.StatusInternalServerError, closeErr
 	}
 	return 0, nil

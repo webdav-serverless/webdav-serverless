@@ -60,6 +60,7 @@ func (s Server) OpenFile(ctx context.Context, path string, flag int, perm os.Fil
 	}
 	entryID, ok := ref.Entries[path]
 	if !ok {
+		fmt.Println("OpenFile: ErrNotExist")
 		return nil, os.ErrNotExist
 	}
 
@@ -137,6 +138,9 @@ func (f FileReader) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (f FileReader) Readdir(count int) ([]fs.FileInfo, error) {
+	for _, v := range f.files {
+		fmt.Println("Readdir: ", v.Name())
+	}
 	return f.files, nil
 }
 

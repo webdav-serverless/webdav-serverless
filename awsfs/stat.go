@@ -17,6 +17,7 @@ func (s Server) Stat(ctx context.Context, path string) (os.FileInfo, error) {
 
 	id, ok := ref.Entries[path]
 	if !ok {
+		fmt.Println("Stat: ErrNotExist", path)
 		return nil, os.ErrNotExist
 	}
 

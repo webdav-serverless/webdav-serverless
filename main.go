@@ -68,11 +68,11 @@ func main() {
 			PhysicalStore: physicalStore,
 		},
 		LockSystem: webdav.NewMemLS(),
-		Logger: func(r *http.Request, err error) {
+		Logger: func(r *http.Request, code int, err error) {
 			if err != nil {
-				log.Printf("WEBDAV [%s]: %s, ERROR: %s\n", r.Method, r.URL, err)
+				log.Printf("WEBDAV [%s]: %s, %d, ERROR: %s\n", r.Method, r.URL, code, err)
 			} else {
-				log.Printf("WEBDAV [%s]: %s \n", r.Method, r.URL)
+				log.Printf("WEBDAV [%s]: %s, %d \n", r.Method, r.URL, code)
 			}
 		},
 	}
