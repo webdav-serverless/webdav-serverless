@@ -24,12 +24,14 @@ func (s Server) RemoveAll(ctx context.Context, path string) error {
 	}
 
 	_, ok := ref.Entries[path]
-	if ok {
+	if !ok {
 		return os.ErrNotExist
 	}
-	ids := []string{}
+	var ids []string
 	for k, v := range ref.Entries {
-		if strings.HasPrefix(v, path) {
+
+		if k == path || strings.HasPrefix(k, path+"/") {
+			fmt.Println("HIT RemoveAll: ", k, v, path)
 			delete(ref.Entries, k)
 			ids = append(ids, v)
 		}
