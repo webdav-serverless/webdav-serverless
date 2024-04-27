@@ -231,6 +231,40 @@ func (m MetadataStore) AddEntry(ctx context.Context, entry Entry, path string) e
 	return nil
 }
 
+func (m MetadataStore) UpdateEntry(ctx context.Context, entry Entry) error {
+	condition := expression.Name("version").Equal(expression.Value(entry.Version))
+	update := expression.
+		Set(expression.Name("size"), expression.Value(entry.Size)).
+		Set(expression.Name("modify"), expression.Value(entry.Modify)).
+		Add(expression.Name("version"), expression.Value(1))
+	expr, err := expression.NewBuilder().
+		WithCondition(condition).
+		WithUpdate(update).
+		Build()
+
+	if err != nil {
+		return fmt.Errorf("failed to build expression, %w", err)
+	}
+
+	_, err = m.DynamoDBClient.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		Key: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{
+				Value: entry.ID,
+			},
+		},
+		TableName:                           aws.String(m.EntryTableName),
+		UpdateExpression:                    expr.Update(),
+		ConditionExpression:                 expr.Condition(),
+		ExpressionAttributeNames:            expr.Names(),
+		ExpressionAttributeValues:           expr.Values(),
+		ReturnValuesOnConditionCheckFailure: types.ReturnValuesOnConditionCheckFailureNone,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update items: %w", err)
+	}
+	return nil
+}
+
 func (m MetadataStore) UpdateEntryName(ctx context.Context, entry Entry, ref Reference) error {
 	entryCondition := expression.Name("version").Equal(expression.Value(entry.Version))
 	entryUpdate := expression.Set(expression.Name("name"), expression.Value(entry.Name)).
@@ -306,9 +340,9 @@ func (m MetadataStore) DeleteEntries(ctx context.Context, ids []string, ref Refe
 		return fmt.Errorf("failed to build expression, %w", err)
 	}
 
-	var deleteItems []types.TransactWriteItem
+	var transactItems []types.TransactWriteItem
 	for _, id := range ids {
-		deleteItems = append(deleteItems, types.TransactWriteItem{
+		transactItems = append(transactItems, types.TransactWriteItem{
 			Delete: &types.Delete{
 				TableName: aws.String(m.EntryTableName),
 				Key: map[string]types.AttributeValue{
@@ -319,7 +353,7 @@ func (m MetadataStore) DeleteEntries(ctx context.Context, ids []string, ref Refe
 			},
 		})
 	}
-	deleteItems = append(deleteItems, types.TransactWriteItem{
+	transactItems = append(transactItems, types.TransactWriteItem{
 		Update: &types.Update{
 			Key: map[string]types.AttributeValue{
 				"id": &types.AttributeValueMemberS{
@@ -335,7 +369,7 @@ func (m MetadataStore) DeleteEntries(ctx context.Context, ids []string, ref Refe
 		},
 	})
 	_, err = m.DynamoDBClient.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
-		TransactItems: deleteItems,
+		TransactItems: transactItems,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to delete items, %w", err)
