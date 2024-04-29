@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 func (s Server) Rename(ctx context.Context, oldPath, newPath string) error {
-	fmt.Println("Rename: ", oldPath, " ->", newPath)
+	fmt.Println("Rename: ", oldPath, newPath)
 
 	if oldPath = slashClean(oldPath); oldPath == "/" {
 		return os.ErrInvalid
@@ -18,29 +20,35 @@ func (s Server) Rename(ctx context.Context, oldPath, newPath string) error {
 
 	ref, err := s.MetadataStore.GetReference(ctx, referenceID)
 	if err != nil {
-		fmt.Println("Rename1: ", err)
 		return err
 	}
 
 	id, ok := ref.Entries[oldPath]
 	if !ok {
-		fmt.Println("Rename2: ErrNotExist")
 		return os.ErrNotExist
 	}
 
 	entry, err := s.MetadataStore.GetEntry(ctx, id)
 	if err != nil {
-		fmt.Println("Rename3: ", err)
 		return err
 	}
+	entry.Name = filepath.Base(newPath)
 
 	ref.Entries[newPath] = id
 	delete(ref.Entries, oldPath)
-	entry.Name = newPath
+
+	if entry.Type == EntryTypeDir {
+		for k, v := range ref.Entries {
+			if strings.HasPrefix(k, oldPath+"/") {
+				delete(ref.Entries, k)
+				newPath := strings.Replace(k, oldPath, newPath, 1)
+				ref.Entries[newPath] = v
+			}
+		}
+	}
 
 	err = s.MetadataStore.UpdateEntryName(ctx, entry, ref)
 	if err != nil {
-		fmt.Println("Rename3: UpdateEntryName", err)
 		return err
 	}
 
