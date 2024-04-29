@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -66,14 +68,30 @@ func main() {
 		FileSystem: awsfs.Server{
 			MetadataStore: metadataStore,
 			PhysicalStore: physicalStore,
+			TempDir:       filepath.Clean(os.TempDir()),
 		},
 		LockSystem: webdav.NewMemLS(),
 		Logger: func(r *http.Request, code int, err error) {
-			if err != nil {
-				log.Printf("WEBDAV [%s]: %s, %d, ERROR: %s\n", r.Method, r.URL, code, err)
-			} else {
-				log.Printf("WEBDAV [%s]: %s, %d \n", r.Method, r.URL, code)
+			litmus := r.Header.Get("X-Litmus")
+			//if len(litmus) > 19 {
+			//	litmus = litmus[:16] + "..."
+			//}
+			switch r.Method {
+			case "COPY", "MOVE":
+				dst := ""
+				if u, err := url.Parse(r.Header.Get("Destination")); err == nil {
+					dst = u.Path
+				}
+				o := r.Header.Get("Overwrite")
+				log.Printf("%-20s%-10s%-30s%-30so=%-2s%v", litmus, r.Method, r.URL.Path, dst, o, err)
+			default:
+				log.Printf("%-20s%-10s%-30s%v", litmus, r.Method, r.URL.Path, err)
 			}
+			//if err != nil {
+			//	log.Printf("WEBDAV [%s]: %s, %d, ERROR: %s\n", r.Method, r.URL, code, err)
+			//} else {
+			//	log.Printf("WEBDAV [%s]: %s, %d \n", r.Method, r.URL, code)
+			//}
 		},
 	}
 	http.Handle("/", srv)

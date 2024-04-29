@@ -2,8 +2,6 @@ package awsfs
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,7 +10,6 @@ import (
 )
 
 func (s Server) Mkdir(ctx context.Context, path string, perm os.FileMode) error {
-	fmt.Println("Mkdir: ", path)
 
 	if path = slashClean(path); path == "/" {
 		return os.ErrExist
@@ -28,11 +25,11 @@ func (s Server) Mkdir(ctx context.Context, path string, perm os.FileMode) error 
 		return os.ErrExist
 	}
 
-	parentDirPath := GetParentDirPath(path)
+	parentDirPath := filepath.Dir(path)
 
 	parentID, ok := ref.Entries[parentDirPath]
 	if !ok {
-		return errors.New("no such parent directory")
+		return os.ErrNotExist
 	}
 
 	newEntry := Entry{
@@ -50,8 +47,4 @@ func (s Server) Mkdir(ctx context.Context, path string, perm os.FileMode) error 
 	}
 
 	return nil
-}
-
-func GetParentDirPath(path string) string {
-	return filepath.Dir(path)
 }

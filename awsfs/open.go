@@ -50,7 +50,8 @@ func (f FileInfo) Sys() any {
 }
 
 func (s Server) OpenFile(ctx context.Context, path string, flag int, perm os.FileMode) (webdav.File, error) {
-	fmt.Println("OpenFile: ", path)
+	fmt.Println("OpenFile:", path, flag, perm)
+
 	if path = slashClean(path); path == "" {
 		return nil, os.ErrInvalid
 	}
@@ -60,7 +61,6 @@ func (s Server) OpenFile(ctx context.Context, path string, flag int, perm os.Fil
 	}
 	entryID, ok := ref.Entries[path]
 	if !ok {
-		fmt.Println("OpenFile: ErrNotExist")
 		return nil, os.ErrNotExist
 	}
 
@@ -103,8 +103,18 @@ func (s Server) OpenFile(ctx context.Context, path string, flag int, perm os.Fil
 		return nil, err
 	}
 
+	temp, err := os.CreateTemp(s.TempDir, "webdav-temp-")
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = io.Copy(temp, r)
+	if err != nil {
+		return nil, err
+	}
+
 	return &FileReader{
-		ReadCloser: r,
+		tempFile: temp,
 		fileInfo: FileInfo{
 			name:    entry.Name,
 			size:    entry.Size,
@@ -117,29 +127,31 @@ func (s Server) OpenFile(ctx context.Context, path string, flag int, perm os.Fil
 }
 
 type FileReader struct {
-	io.ReadCloser
+	tempFile *os.File
 	fileInfo FileInfo
 	files    []fs.FileInfo
 }
 
 func (f FileReader) Close() error {
-	if f.ReadCloser == nil {
+	if f.tempFile == nil {
 		return nil
 	}
-	return f.ReadCloser.Close()
+	defer os.Remove(f.tempFile.Name())
+	return f.tempFile.Close()
 }
 
 func (f FileReader) Read(p []byte) (n int, err error) {
-	return f.ReadCloser.Read(p)
+	return f.tempFile.Read(p)
 }
 
 func (f FileReader) Seek(offset int64, whence int) (int64, error) {
-	return f.fileInfo.size, nil
+	return f.tempFile.Seek(offset, whence)
 }
 
 func (f FileReader) Readdir(count int) ([]fs.FileInfo, error) {
-	for _, v := range f.files {
-		fmt.Println("Readdir: ", v.Name())
+	fmt.Println("Readdir: ", f.fileInfo.Name())
+	for _, file := range f.files {
+		fmt.Println("- ", file.Name(), file.Size(), file.ModTime(), file.IsDir())
 	}
 	return f.files, nil
 }

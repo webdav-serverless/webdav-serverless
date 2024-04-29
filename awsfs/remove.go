@@ -8,11 +8,7 @@ import (
 )
 
 func (s Server) RemoveAll(ctx context.Context, path string) error {
-	fmt.Println("RemoveAll: ", path)
-
-	if path = slashClean(path); path == "/" {
-		return os.ErrInvalid
-	}
+	fmt.Println("RemoveAll:", path)
 
 	if path = slashClean(path); path == "/" {
 		return os.ErrInvalid
@@ -31,7 +27,6 @@ func (s Server) RemoveAll(ctx context.Context, path string) error {
 	for k, v := range ref.Entries {
 
 		if k == path || strings.HasPrefix(k, path+"/") {
-			fmt.Println("HIT RemoveAll: ", k, v, path)
 			delete(ref.Entries, k)
 			ids = append(ids, v)
 		}

@@ -8,6 +8,7 @@ import (
 type Server struct {
 	MetadataStore MetadataStore
 	PhysicalStore PhysicalStore
+	TempDir       string
 }
 
 // slashClean is equivalent to but slightly more efficient than
