@@ -2,7 +2,7 @@ package awsfs
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,6 +12,12 @@ import (
 )
 
 func (s Server) Create(ctx context.Context, path string, flag int, perm os.FileMode, r io.Reader) (os.FileInfo, error) {
+
+	fmt.Println("Create:", path, flag, perm)
+
+	if path = slashClean(path); path == "" {
+		return nil, os.ErrInvalid
+	}
 
 	ref, err := s.MetadataStore.GetReference(ctx, referenceID)
 	if err != nil {
@@ -53,7 +59,7 @@ func (s Server) Create(ctx context.Context, path string, flag int, perm os.FileM
 		parentDirPath := filepath.Dir(path)
 		parentID, ok := ref.Entries[parentDirPath]
 		if !ok {
-			return nil, errors.New("no such parent directory")
+			return nil, os.ErrNotExist
 		}
 		newEntry := Entry{
 			ID:       entryID,
