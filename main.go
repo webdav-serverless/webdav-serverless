@@ -65,7 +65,7 @@ func main() {
 	}
 
 	srv := &webdav.Handler{
-		FileSystem: awsfs.Server{
+		FileSystem: &awsfs.Server{
 			MetadataStore: metadataStore,
 			PhysicalStore: physicalStore,
 			TempDir:       filepath.Clean(os.TempDir()),

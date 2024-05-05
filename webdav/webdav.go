@@ -265,11 +265,7 @@ func (h *Handler) handlePut(w http.ResponseWriter, r *http.Request) (status int,
 	ctx := r.Context()
 	fi, err := h.FileSystem.Create(ctx, reqPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666, r.Body)
 	if err != nil {
-		return http.StatusNotFound, err
-	}
-	// TODO(rost): Returning 405 Method Not Allowed might not be appropriate.
-	if err != nil {
-		return http.StatusMethodNotAllowed, err
+		return http.StatusConflict, err
 	}
 	etag, err := findETag(ctx, h.FileSystem, h.LockSystem, reqPath, fi)
 	if err != nil {

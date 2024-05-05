@@ -140,6 +140,9 @@ func (m MetadataStore) GetEntry(ctx context.Context, id string) (Entry, error) {
 	if err != nil {
 		return Entry{}, fmt.Errorf("failed to unmarshal map: %w", err)
 	}
+	if entry.DeadProps == nil {
+		entry.DeadProps = make(map[string]string)
+	}
 	return entry, nil
 }
 
@@ -167,6 +170,11 @@ func (m MetadataStore) GetEntriesByParentID(ctx context.Context, id string) ([]E
 	err = attributevalue.UnmarshalListOfMaps(out.Items, &entries)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal map: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.DeadProps == nil {
+			entry.DeadProps = make(map[string]string)
+		}
 	}
 	return entries, nil
 }
@@ -236,6 +244,7 @@ func (m MetadataStore) UpdateEntry(ctx context.Context, entry Entry) error {
 	update := expression.
 		Set(expression.Name("size"), expression.Value(entry.Size)).
 		Set(expression.Name("modify"), expression.Value(entry.Modify)).
+		Set(expression.Name("dead_props"), expression.Value(entry.DeadProps)).
 		Add(expression.Name("version"), expression.Value(1))
 	expr, err := expression.NewBuilder().
 		WithCondition(condition).

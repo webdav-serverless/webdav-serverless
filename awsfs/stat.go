@@ -2,12 +2,11 @@ package awsfs
 
 import (
 	"context"
-	"fmt"
 	"os"
 )
 
-func (s Server) Stat(ctx context.Context, path string) (os.FileInfo, error) {
-	fmt.Println("Stat: ", path)
+func (s *Server) Stat(ctx context.Context, path string) (os.FileInfo, error) {
+
 	path = slashClean(path)
 
 	ref, err := s.MetadataStore.GetReference(ctx, referenceID)
@@ -28,9 +27,8 @@ func (s Server) Stat(ctx context.Context, path string) (os.FileInfo, error) {
 	info := FileInfo{
 		name:    entry.Name,
 		size:    entry.Size,
-		mode:    os.FileMode(0), // FIXME
 		modTime: entry.Modify,
-		isDir:   entry.Type == EntryTypeDir,
+		isDir:   entry.IsDir(),
 	}
 
 	return info, nil
