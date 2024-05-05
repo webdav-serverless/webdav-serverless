@@ -34,11 +34,16 @@ type Reference struct {
 }
 
 type Entry struct {
-	ID       string    `dynamodbav:"id"`
-	ParentID string    `dynamodbav:"parent_id"`
-	Name     string    `dynamodbav:"name"`
-	Type     EntryType `dynamodbav:"type"`
-	Size     int64     `dynamodbav:"size"`
-	Modify   time.Time `dynamodbav:"modify"`
-	Version  int       `dynamodbav:"version"`
+	ID        string            `dynamodbav:"id"`
+	ParentID  string            `dynamodbav:"parent_id"`
+	Name      string            `dynamodbav:"name"`
+	Type      EntryType         `dynamodbav:"type"`
+	Size      int64             `dynamodbav:"size"`
+	Modify    time.Time         `dynamodbav:"modify"`
+	DeadProps map[string]string `dynamodbav:"dead_props"`
+	Version   int               `dynamodbav:"version"`
+}
+
+func (e Entry) IsDir() bool {
+	return e.Type == EntryTypeDir
 }
