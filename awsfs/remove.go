@@ -2,14 +2,11 @@ package awsfs
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strings"
 )
 
-func (s Server) RemoveAll(ctx context.Context, path string) error {
-	fmt.Println("RemoveAll:", path)
-
+func (s *Server) RemoveAll(ctx context.Context, path string) error {
 	if path = slashClean(path); path == "/" {
 		return os.ErrInvalid
 	}

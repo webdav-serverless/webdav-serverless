@@ -2,15 +2,12 @@ package awsfs
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-func (s Server) Rename(ctx context.Context, oldPath, newPath string) error {
-	fmt.Println("Rename: ", oldPath, newPath)
-
+func (s *Server) Rename(ctx context.Context, oldPath, newPath string) error {
 	if oldPath = slashClean(oldPath); oldPath == "/" {
 		return os.ErrInvalid
 	}

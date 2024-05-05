@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func (s Server) Mkdir(ctx context.Context, path string, perm os.FileMode) error {
+func (s *Server) Mkdir(ctx context.Context, path string, perm os.FileMode) error {
 
 	if path = slashClean(path); path == "/" {
 		return os.ErrExist

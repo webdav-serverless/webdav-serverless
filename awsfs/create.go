@@ -2,7 +2,6 @@ package awsfs
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,9 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func (s Server) Create(ctx context.Context, path string, flag int, perm os.FileMode, r io.Reader) (os.FileInfo, error) {
-
-	fmt.Println("Create:", path, flag, perm)
+func (s *Server) Create(ctx context.Context, path string, flag int, perm os.FileMode, r io.Reader) (os.FileInfo, error) {
 
 	if path = slashClean(path); path == "" {
 		return nil, os.ErrInvalid
@@ -50,7 +47,6 @@ func (s Server) Create(ctx context.Context, path string, flag int, perm os.FileM
 		return &FileInfo{
 			name:    entry.Name,
 			size:    entry.Size,
-			mode:    perm,
 			modTime: entry.Modify,
 			isDir:   false,
 			sys:     nil,
@@ -77,7 +73,6 @@ func (s Server) Create(ctx context.Context, path string, flag int, perm os.FileM
 		return &FileInfo{
 			name:    newEntry.Name,
 			size:    newEntry.Size,
-			mode:    perm,
 			modTime: newEntry.Modify,
 			isDir:   false,
 			sys:     nil,
