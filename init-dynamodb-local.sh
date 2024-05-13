@@ -2,7 +2,7 @@
 set -u
 
 aws dynamodb create-table \
-    --table-name Entry \
+    --table-name webdav-serverless-entry \
     --region us-east-1 \
     --endpoint-url $DYNAMO_DB_URL \
     --attribute-definitions \
@@ -22,7 +22,7 @@ aws dynamodb create-table \
             }
         ]"
 aws dynamodb create-table \
-    --table-name Reference \
+    --table-name webdav-serverless-reference \
     --region us-east-1 \
     --endpoint-url $DYNAMO_DB_URL \
     --attribute-definitions \
