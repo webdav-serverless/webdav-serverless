@@ -1,19 +1,21 @@
-# syntax=docker/dockerfile:1
+# OFFICIAL REPOSITORY: https://hub.docker.com/_/golang/
+FROM --platform=linux/amd64 golang:1.22.2
 
-# https://notroj.github.io/litmus/
-# https://github.com/messense/dav-server-rs/blob/main/README.litmus-test.md
+ENV NAME webdav-serverless
+ENV PKG github.com/webdav-serverless/$NAME
+ENV SRC_DIR /go/src/$PKG
+ENV CMD_DIR $SRC_DIR/cmd/$NAME
+RUN mkdir -p $SRC_DIR
+WORKDIR $SRC_DIR
 
-FROM arm64v8/gcc:4.9 AS builder
-RUN <<EOF
-curl -O https://notroj.github.io/litmus/litmus-0.14.tar.gz
-tar xf litmus-0.14.tar.gz
-cd litmus-0.14
-./configure --prefix=/litmus
-make install
-EOF
+# prepare go modules
+COPY go.mod .
+COPY go.sum .
+RUN go mod download
+COPY . $SRC_DIR
 
-FROM arm64v8/ubuntu:20.04
-RUN apt update && apt install -y libgssapi-krb5-2 libk5crypto3 libexpat1 && apt-get clean && rm -rf /var/lib/apt/lists/*
-WORKDIR /litmus/
-COPY --chmod=755 --from=builder /litmus/ /litmus/
-ENTRYPOINT ["/litmus/bin/litmus"]
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o /go/bin/webdav-serverless ./main.go
+
+FROM gcr.io/distroless/static-debian11
+COPY --from=0 /go/bin/webdav-serverless  /go/bin/webdav-serverless
+ENTRYPOINT ["/go/bin/webdav-serverless"]

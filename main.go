@@ -2,66 +2,112 @@ package main
 
 import (
 	"context"
-	"flag"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/webdav-serverless/webdav-serverless/awsfs"
 	"github.com/webdav-serverless/webdav-serverless/webdav"
 )
 
+type Params struct {
+	Port                int    `mapstructure:"port"`
+	DynamoDBTablePrefix string `mapstructure:"dynamodb-table-prefix"`
+	S3BucketName        string `mapstructure:"s3-bucket-name"`
+	DynamoDBURL         string `mapstructure:"dynamodb-url"`
+	S3URL               string `mapstructure:"s3-url"`
+	BasicAuthUser       string `mapstructure:"basic-auth-user"`
+	BasicAuthPassword   string `mapstructure:"basic-auth-pass"`
+	DisableBasicAuth    bool   `mapstructure:"disable-basic-auth"`
+}
+
 func main() {
 
-	httpPort := flag.Int("port", 80, "Port to serve on (Plain HTTP)")
-	httpsPort := flag.Int("port-secure", 443, "Port to serve TLS on")
-	serveSecure := flag.Bool("secure", false, "Serve HTTPS. Default false")
-	dynamodbURL := flag.String("dynamodb-url", "", "DynamoDB base endpoint (for local development)")
-	s3URL := flag.String("s3-url", "", "S3 base endpoint (for local development)")
+	var params = &Params{}
 
-	flag.Parse()
+	c := &cobra.Command{
+		Use:     "webdav-serverless",
+		Short:   "An implementation of the WebDav protocol backed by AWS S3 and DynamoDB",
+		Long:    `An implementation of the WebDav protocol backed by AWS S3 and DynamoDB.`,
+		Version: "",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return run(params)
+		},
+	}
+
+	flags := c.PersistentFlags()
+	flags.IntVar(&params.Port, "port", 80, "Port to serve on (Plain HTTP).")
+	_ = viper.BindPFlag("port", flags.Lookup("port"))
+	flags.StringVar(&params.DynamoDBTablePrefix, "dynamodb-table-prefix", "webdav-serverless-", "Prefix of DynamoDB table.")
+	_ = viper.BindPFlag("dynamodb-table-prefix", flags.Lookup("dynamodb-table-prefix"))
+	flags.StringVar(&params.S3BucketName, "s3-bucket-name", "webdav-serverless", "Name of S3 bucket.")
+	_ = viper.BindPFlag("s3-bucket-name", flags.Lookup("s3-bucket-name"))
+	flags.StringVar(&params.DynamoDBURL, "dynamodb-url", "", "DynamoDB base endpoint (for local development).")
+	_ = viper.BindPFlag("dynamodb-url", flags.Lookup("dynamodb-url"))
+	flags.StringVar(&params.S3URL, "s3-url", "", "S3 base endpoint (for local development).")
+	_ = viper.BindPFlag("s3-url", flags.Lookup("s3-url"))
+	flags.StringVar(&params.BasicAuthUser, "basic-auth-user", "", "Basic auth user name.")
+	_ = viper.BindPFlag("basic-auth-user", flags.Lookup("basic-auth-user"))
+	flags.StringVar(&params.BasicAuthPassword, "basic-auth-pass", "", "Basic auth password.")
+	_ = viper.BindPFlag("basic-auth-pass", flags.Lookup("basic-auth-pass"))
+	flags.BoolVar(&params.DisableBasicAuth, "disable-basic-auth", false, "Disable basic auth.")
+	_ = viper.BindPFlag("disable-basic-auth", flags.Lookup("disable-basic-auth"))
+
+	cobra.OnInitialize(func() {
+		viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
+		viper.AutomaticEnv()
+		if err := viper.Unmarshal(&params); err != nil {
+			fmt.Println("Error decoding params:", err)
+			return
+		}
+	})
+
+	if err := c.Execute(); err != nil {
+		fmt.Printf("ERROR: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run(params *Params) error {
 
 	ctx := context.Background()
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
-		log.Fatalf("failed to load aws config: %v", err)
+		return fmt.Errorf("failed to load aws config: %v", err)
 	}
 
 	metadataStore := awsfs.MetadataStore{
-		EntryTableName:     "Entry",
-		ReferenceTableName: "Reference",
+		EntryTableName:     params.DynamoDBTablePrefix + "entry",
+		ReferenceTableName: params.DynamoDBTablePrefix + "reference",
 		DynamoDBClient: dynamodb.NewFromConfig(cfg, func(options *dynamodb.Options) {
-			if *dynamodbURL != "" {
-				options.BaseEndpoint = dynamodbURL
+			if params.DynamoDBURL != "" {
+				options.BaseEndpoint = &params.DynamoDBURL
 			}
 		}),
 	}
 
-	s3Cfg := aws.Config{
-		Region:      cfg.Region,
-		Credentials: credentials.NewStaticCredentialsProvider("root", "deadbeef", ""),
-	}
-
 	physicalStore := awsfs.PhysicalStore{
-		BucketName: "test",
-		S3Client: s3.NewFromConfig(s3Cfg, func(options *s3.Options) {
-			if *s3URL != "" {
+		BucketName: params.S3BucketName,
+		S3Client: s3.NewFromConfig(cfg, func(options *s3.Options) {
+			if params.S3URL != "" {
 				options.UsePathStyle = true
-				options.BaseEndpoint = s3URL
+				options.BaseEndpoint = &params.S3URL
 			}
 		}),
 	}
 
 	if err = metadataStore.Init(context.Background()); err != nil {
-		log.Fatalf("failed to init refarence: %v", err)
+		return fmt.Errorf("failed to init refarence: %v", err)
 	}
 
 	srv := &webdav.Handler{
@@ -73,9 +119,9 @@ func main() {
 		LockSystem: webdav.NewMemLS(),
 		Logger: func(r *http.Request, code int, err error) {
 			litmus := r.Header.Get("X-Litmus")
-			//if len(litmus) > 19 {
-			//	litmus = litmus[:16] + "..."
-			//}
+			if len(litmus) > 19 {
+				litmus = litmus[:16] + "..."
+			}
 			switch r.Method {
 			case "COPY", "MOVE":
 				dst := ""
@@ -83,15 +129,10 @@ func main() {
 					dst = u.Path
 				}
 				o := r.Header.Get("Overwrite")
-				log.Printf("%-20s%-10s%-30s%-30so=%-2s%v code:%d", litmus, r.Method, r.URL.Path, dst, o, err, code)
+				log.Printf("%-20s%-10s%-30s%-30so=%-2s%-10d%v", litmus, r.Method, r.URL.Path, dst, o, code, err)
 			default:
-				log.Printf("%-20s%-10s%-30s%v code:%d", litmus, r.Method, r.URL.Path, err, code)
+				log.Printf("%-20s%-10s%-30s%-10d%v", litmus, r.Method, r.URL.Path, code, err)
 			}
-			//if err != nil {
-			//	log.Printf("WEBDAV [%s]: %s, %d, ERROR: %s\n", r.Method, r.URL, code, err)
-			//} else {
-			//	log.Printf("WEBDAV [%s]: %s, %d \n", r.Method, r.URL, code)
-			//}
 		},
 	}
 
@@ -121,6 +162,15 @@ func main() {
 	// Thus, we assume that the propfind_invalid2 test is obsolete, and
 	// hard-code the 400 Bad Request response that the test expects.
 	http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !params.DisableBasicAuth {
+			if user, pass, ok := r.BasicAuth(); !ok || user != params.BasicAuthUser || pass != params.BasicAuthPassword {
+				w.Header().Add("WWW-Authenticate", `Basic realm="Please enter your username and password."`)
+				http.Error(w, "401 Unauthorized", http.StatusUnauthorized)
+				log.Printf("%-20s%-10s%-30s%-10d%v", "", r.Method, r.URL.Path, http.StatusUnauthorized,
+					errors.New("unauthorized"))
+				return
+			}
+		}
 		if r.Header.Get("X-Litmus") == "props: 3 (propfind_invalid2)" {
 			http.Error(w, "400 Bad Request", http.StatusBadRequest)
 			return
@@ -128,23 +178,10 @@ func main() {
 		srv.ServeHTTP(w, r)
 	}))
 
-	if *serveSecure == true {
-		if _, err := os.Stat("./cert.pem"); err != nil {
-			fmt.Println("[x] No cert.pem in current directory. Please provide a valid cert")
-			return
-		}
-		if _, er := os.Stat("./key.pem"); er != nil {
-			fmt.Println("[x] No key.pem in current directory. Please provide a valid cert")
-			return
-		}
-
-		go func() {
-			_ = http.ListenAndServeTLS(fmt.Sprintf(":%d", *httpsPort), "cert.pem", "key.pem", nil)
-		}()
-	}
-	log.Printf("WEBDAV ListenAndServe: [%s]\n", fmt.Sprintf(":%d", *httpPort))
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", *httpPort), nil); err != nil {
-		log.Fatalf("Error with WebDAV server: %v", err)
+	log.Printf("WEBDAV ListenAndServe: [%s]\n", fmt.Sprintf(":%d", params.Port))
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", params.Port), nil); err != nil {
+		return fmt.Errorf("error with WebDAV server: %v", err)
 	}
 
+	return nil
 }
