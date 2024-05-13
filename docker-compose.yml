@@ -36,8 +36,8 @@ services:
       - 19010:9000
       - 19011:9001
     environment:
-      MINIO_ACCESS_KEY: root
-      MINIO_SECRET_KEY: deadbeef
+      MINIO_ACCESS_KEY: AKIAIOSFODNN7EXAMPLE
+      MINIO_SECRET_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
     command: server --console-address :9001 /data/s3
 
   s3-init:
@@ -46,9 +46,9 @@ services:
       - s3
     entrypoint: >
       /bin/sh -c "
-      until (/usr/bin/mc config host add myminio http://s3:9000 root deadbeef) do echo '...waiting...' && sleep 1; done;
-      /usr/bin/mc mb myminio/test;
-      /usr/bin/mc policy download myminio/test;
+      until (/usr/bin/mc config host add myminio http://s3:9000 AKIAIOSFODNN7EXAMPLE wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY) do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc mb myminio/webdav-serverless;
+      /usr/bin/mc policy download myminio/webdav-serverless;
       exit 0;
       "
     profiles:
