@@ -277,6 +277,7 @@ func (m MetadataStore) UpdateEntry(ctx context.Context, entry Entry) error {
 func (m MetadataStore) UpdateEntryName(ctx context.Context, entry Entry, ref Reference) error {
 	entryCondition := expression.Name("version").Equal(expression.Value(entry.Version))
 	entryUpdate := expression.Set(expression.Name("name"), expression.Value(entry.Name)).
+		Set(expression.Name("parent_id"), expression.Value(entry.ParentID)).
 		Add(expression.Name("version"), expression.Value(1))
 	entryExpr, err := expression.NewBuilder().
 		WithCondition(entryCondition).
