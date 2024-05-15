@@ -24,12 +24,18 @@ func (s *Server) Rename(ctx context.Context, oldPath, newPath string) error {
 	if !ok {
 		return os.ErrNotExist
 	}
+	parentDirPath := filepath.Dir(newPath)
+	parentID, ok := ref.Entries[parentDirPath]
+	if !ok {
+		return os.ErrNotExist
+	}
 
 	entry, err := s.MetadataStore.GetEntry(ctx, id)
 	if err != nil {
 		return err
 	}
 	entry.Name = filepath.Base(newPath)
+	entry.ParentID = parentID
 
 	ref.Entries[newPath] = id
 	delete(ref.Entries, oldPath)
